@@ -1,12 +1,12 @@
 """
-ECC Digital Signature (ECDSA) - implemented from scratch.
+ECC Digital Signature (ECDSA)
 
 Curve:  y^2 = x^3 + a*x + b  over Z_p        (NIST P-256)
 Follows the course notes: Figure 2 (point addition rule),
 Figure 6 (key generation, signing, verification).
 
 Usage:
-    python main.py                                          (demo)
+    python main.py
     python main.py keygen
     python main.py sign   --key <d-hex>  --msg "hello"
     python main.py verify --pub <Q-hex>  --msg "hello" --sig <sig-hex>
@@ -26,25 +26,22 @@ Gy = 0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5
 n  = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
 G  = (Gx, Gy)
 
-# The point at infinity O is represented by None.
 
-
-# --- Figure 2: the addition rule --------------------------------------------
 def point_add(P, Q):
-    if P is None:                        # rule 1: O + Q = Q
+    if P is None:
         return Q
-    if Q is None:                        # rule 1: P + O = P
+    if Q is None:
         return P
 
     x1, y1 = P
     x2, y2 = Q
 
-    if x1 == x2 and (y1 + y2) % p == 0:  # rule 2: P + (-P) = O
+    if x1 == x2 and (y1 + y2) % p == 0:
         return None
 
-    if P == Q:                           # tangent:  lam = (3x1^2 + a) / 2y1
+    if P == Q:
         lam = (3 * x1 * x1 + a) * pow(2 * y1, -1, p) % p
-    else:                                # secant:   lam = (y2 - y1) / (x2 - x1)
+    else:
         lam = (y2 - y1) * pow(x2 - x1, -1, p) % p
 
     x3 = (lam * lam - x1 - x2) % p
@@ -53,7 +50,6 @@ def point_add(P, Q):
 
 
 def scalar_mul(k, P):
-    """k*P by double-and-add."""
     result = None
     while k > 0:
         if k & 1:
@@ -69,50 +65,46 @@ def on_curve(P):
 
 
 def hash_message(msg):
-    """h(m) as an integer."""
     return int.from_bytes(hashlib.sha256(msg).digest(), "big")
 
 
-# --- Figure 6(a): key generation --------------------------------------------
 def generate_keys():
-    d = secrets.randbelow(n - 2) + 1     # private key, 1 <= d <= n-1
-    Q = scalar_mul(d, G)                 # public key  Q = d*G
+    d = secrets.randbelow(n - 2) + 1
+    Q = scalar_mul(d, G)
     return d, Q
 
 
-# --- Figure 6(b): signature generation --------------------------------------
+
 def sign(d, msg):
     z = hash_message(msg)
     while True:
-        k = secrets.randbelow(n - 2) + 1     # random per-message nonce
-        x1, _ = scalar_mul(k, G)             # k*G
+        k = secrets.randbelow(n - 2) + 1
+        x1, _ = scalar_mul(k, G)
         r = x1 % n
         if r == 0:
             continue
-        s = pow(k, -1, n) * (z + d * r) % n  # s = k^-1 (h(m) + d*r) mod n
+        s = pow(k, -1, n) * (z + d * r) % n
         if s == 0:
             continue
         return (r, s)
 
 
-# --- Figure 6(c): signature verification ------------------------------------
 def verify(Q, msg, signature):
     r, s = signature
     if not (1 <= r < n and 1 <= s < n):
         return False
 
     z = hash_message(msg)
-    w = pow(s, -1, n)                    # w = s^-1 mod n
+    w = pow(s, -1, n)
     u1 = z * w % n
     u2 = r * w % n
 
     X = point_add(scalar_mul(u1, G), scalar_mul(u2, Q))
     if X is None:
         return False
-    return X[0] % n == r                 # accept iff v == r
+    return X[0] % n == r
 
 
-# --- Hex helpers so keys and signatures can be passed on the command line ---
 def key_to_hex(Q):
     return f"{Q[0]:064x}{Q[1]:064x}"
 
@@ -134,9 +126,8 @@ def sig_from_hex(text):
     return (int(text[:64], 16), int(text[64:], 16))
 
 
-# --- Demo -------------------------------------------------------------------
 def demo():
-    message = b"This document was signed with ECC."
+    message = b"Hello World!"
 
     d, Q = generate_keys()
     print("Curve      : NIST P-256  (y^2 = x^3 + ax + b mod p)")
@@ -152,10 +143,9 @@ def demo():
     print()
 
     print("Verify original message :", verify(Q, message, signature))
-    print("Verify altered message  :", verify(Q, b"This document was altered!", signature))
+    print("Verify altered message  :", verify(Q, b"Hello", signature))
 
 
-# --- Command line -----------------------------------------------------------
 def main():
     parser = argparse.ArgumentParser(description="ECC digital signature (ECDSA)")
     sub = parser.add_subparsers(dest="command")
@@ -185,12 +175,14 @@ def main():
         d = int(args.key, 16)
         if not 1 <= d < n:
             sys.exit("private key out of range")
+
         print(sig_to_hex(sign(d, args.msg.encode())))
 
     elif args.command == "verify":
         Q = key_from_hex(args.pub)
         signature = sig_from_hex(args.sig)
         ok = verify(Q, args.msg.encode(), signature)
+
         print("VALID" if ok else "INVALID")
 
 
